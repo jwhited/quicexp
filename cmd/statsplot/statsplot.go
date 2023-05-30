@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	flagInputFile  = flag.String("input", "", "input filename, defaults to stdin if unspecified")
-	flagOutputFile = flag.String("output", "", "output filename")
-	flagStat       = flag.String("stat", "Throughput(kbps)", "stat to plot")
+	flagInputFile   = flag.String("input", "", "input filename, defaults to stdin if unspecified")
+	flagOutputFile  = flag.String("output", "", "output filename")
+	flagStat        = flag.String("stat", "Throughput(kbps)", "stat to plot")
+	flagLabelFilter = flag.String("filter", "", "regular expression to filter labels by")
 )
 
 func main() {
@@ -58,20 +59,28 @@ func main() {
 		log.Fatalf("stat (%s) not found", *flagStat)
 	}
 
+	var re *regexp.Regexp
+	if len(*flagLabelFilter) > 0 {
+		re, err = regexp.Compile(*flagLabelFilter)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	throughput := make(map[string][]int)
 	for _, row := range rows[1:] {
-		if strings.HasSuffix(row[0], "client") {
-			val, err := strconv.Atoi(row[statIndex])
-			if err != nil {
-				log.Fatalf("error converting: %v", err)
-			}
-			vals, ok := throughput[row[0]]
-			if !ok {
-				vals = make([]int, 0)
-			}
-			vals = append(vals, val)
-			throughput[row[0]] = vals
+		if re != nil && !re.MatchString(row[0]) {
+			continue
 		}
+		val, err := strconv.Atoi(row[statIndex])
+		if err != nil {
+			log.Fatalf("error converting: %v", err)
+		}
+		vals, ok := throughput[row[0]]
+		if !ok {
+			vals = make([]int, 0)
+		}
+		vals = append(vals, val)
+		throughput[row[0]] = vals
 	}
 	keysSorted := make([]string, 0)
 	for k := range throughput {
